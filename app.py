@@ -92,7 +92,7 @@ with st.expander("📋 Registro de Votos"):
 
 # Editar registros existentes
 with st.expander("🛠️ Editar Registros Existentes"):
-    st.write("Selecciona un registro para editar la información de un usuario.")
+    st.write("Selecciona un registro para editar o eliminar un usuario.")
     opciones_busqueda = (data["Nombre"] + " " + data["Apellido"]).tolist()
     seleccion = st.selectbox("Buscar registro", [""] + opciones_busqueda)
 
@@ -105,19 +105,33 @@ with st.expander("🛠️ Editar Registros Existentes"):
 
         if not registro.empty:
             row_index = registro.index[0]
-            st.write(f"Editando el registro de {seleccion}:")
+            st.write(f"Editando o eliminando el registro de {seleccion}:")
 
             nombre_edit = st.text_input("Editar Nombre", registro.iloc[0]["Nombre"])
             apellido_edit = st.text_input("Editar Apellido", registro.iloc[0]["Apellido"])
             celular_edit = st.text_input("Editar Número de Celular", registro.iloc[0]["Número de Celular"])
             profesor_edit = st.selectbox("Editar Profesor", profesores, index=profesores.index(registro.iloc[0]["Profesor"]))
 
-            if st.button("Guardar Cambios"):
+            col1, col2 = st.columns(2)
+
+            # Botón para guardar cambios
+            if col1.button("Guardar Cambios"):
                 data.at[row_index, "Nombre"] = nombre_edit
                 data.at[row_index, "Apellido"] = apellido_edit
                 data.at[row_index, "Número de Celular"] = celular_edit
                 data.at[row_index, "Profesor"] = profesor_edit
                 write_csv_to_github(DATA_FILE, data)
+                st.success("🎉 ¡Registro actualizado correctamente!")
+
+            # Botón para eliminar registro
+            if col2.button("Eliminar Registro"):
+                data = data.drop(index=row_index).reset_index(drop=True)
+                write_csv_to_github(DATA_FILE, data)
+                st.success(f"🗑️ ¡Registro de {seleccion} eliminado correctamente!")
+        else:
+            st.warning("⚠️ No se encontró el registro seleccionado.")
+    else:
+        st.info("Escribe y selecciona un registro para editar o eliminar.")
 
 # Distribución de votos
 with st.expander("📊 Distribución de Votos por Profesor"):
