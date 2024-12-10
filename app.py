@@ -115,13 +115,13 @@ if not data.empty:
     votos_por_profesor = data["Profesor"].value_counts().reset_index()
     votos_por_profesor.columns = ["Profesor", "Votos"]
 
-    # Crear gráfico de pastel
+    # Crear gráfico de pastel con colores variados
     fig_pie = px.pie(
         votos_por_profesor, 
         names="Profesor", 
         values="Votos", 
         title="Cantidad de votos por profesor",
-        color_discrete_sequence=px.colors.sequential.Tealgrn
+        color_discrete_sequence=px.colors.qualitative.Set3  # Paleta de colores variados
     )
     fig_pie.update_traces(textinfo="percent+label")
     fig_pie.update_layout(width=1000, height=600)
