@@ -1,37 +1,70 @@
 import streamlit as st
 import pandas as pd
+import requests
+import base64
 from datetime import datetime
+from io import StringIO
 import plotly.express as px
 
-# Archivo CSV donde se almacenarán los datos
+# Configuración de GitHub
+GITHUB_REPO = "BenjaminGhiggo/teletronika"
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 DATA_FILE = "votaciones.csv"
-
-# Archivo para almacenar la lista de profesores
 PROFESORES_FILE = "profesores.csv"
 
-# Cargar datos existentes de votaciones
-try:
-    data = pd.read_csv(DATA_FILE)
-except FileNotFoundError:
+# Función para leer un archivo CSV desde GitHub
+def read_csv_from_github(file_name):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_name}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        content = base64.b64decode(response.json()["content"]).decode("utf-8")
+        return pd.read_csv(StringIO(content))
+    else:
+        return pd.DataFrame() if "votaciones" in file_name else pd.DataFrame({"Profesor": []})
+
+# Función para escribir un archivo CSV en GitHub
+def write_csv_to_github(file_name, df):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{file_name}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    
+    # Obtener el SHA del archivo existente
+    response = requests.get(url, headers=headers)
+    sha = response.json().get("sha") if response.status_code == 200 else None
+
+    # Convertir el DataFrame a CSV y codificarlo en base64
+    content = df.to_csv(index=False).encode("utf-8")
+    content_base64 = base64.b64encode(content).decode("utf-8")
+
+    # Subir archivo
+    data = {
+        "message": f"Actualizar {file_name}",
+        "content": content_base64,
+        "sha": sha,
+    }
+    response = requests.put(url, headers=headers, json=data)
+
+    if response.status_code == 200:
+        st.success(f"✅ {file_name} actualizado correctamente en GitHub.")
+    else:
+        st.error(f"⚠️ No se pudo actualizar {file_name} en GitHub.")
+
+# Leer archivos desde GitHub
+data = read_csv_from_github(DATA_FILE)
+if data.empty:
     data = pd.DataFrame(columns=["Nombre", "Apellido", "Número de Celular", "Profesor", "Fecha y Hora"])
 
-# Asegurarse de que todas las columnas sean cadenas para evitar errores
-data["Nombre"] = data["Nombre"].astype(str)
-data["Apellido"] = data["Apellido"].astype(str)
-data["Número de Celular"] = data["Número de Celular"].astype(str)
-data["Profesor"] = data["Profesor"].astype(str)
-
-# Cargar o inicializar la lista de profesores
-try:
-    profesores = pd.read_csv(PROFESORES_FILE)["Profesor"].tolist()
-except FileNotFoundError:
-    profesores = ["Ramos", "Peralta", "Llamoja", "Galvez", "Erquizio", "Garro", "Carbonel", "Santillan"]
+profesores_df = read_csv_from_github(PROFESORES_FILE)
+profesores = profesores_df["Profesor"].tolist() if not profesores_df.empty else [
+    "Ramos", "Peralta", "Llamoja", "Galvez", "Erquizio", "Garro", "Carbonel", "Santillan"
+]
 
 # Título principal
 st.title("🎓 Elección de Padrinos para la Promoción Teletrónica")
 st.write("¡Bienvenidos al sistema de votación! 🚀 Elige al profesor que será el padrino de nuestra promoción Teletrónica. ❤️‍🔥")
 
-# Sección: Registro de votos
+# Registro de votos
 with st.expander("📋 Registro de Votos"):
     st.write("Llena el siguiente formulario para registrar tu voto. Los datos ingresados estarán protegidos. 🔒")
     with st.form("formulario_votacion"):
@@ -42,13 +75,11 @@ with st.expander("📋 Registro de Votos"):
         enviar = st.form_submit_button("✅ Enviar Voto")
 
         if enviar:
-            # Validación de campos
             if not nombre or not apellido or not celular or not profesor:
                 st.error("⚠️ Por favor, completa todos los campos.")
             elif not celular.isdigit() or len(celular) != 9:
                 st.error("⚠️ Por favor, ingresa un número de celular válido de 9 dígitos.")
             else:
-                # Registrar el voto
                 nueva_fila = pd.DataFrame([{
                     "Nombre": nombre,
                     "Apellido": apellido,
@@ -57,20 +88,15 @@ with st.expander("📋 Registro de Votos"):
                     "Fecha y Hora": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }])
                 data = pd.concat([data, nueva_fila], ignore_index=True)
-                data.to_csv(DATA_FILE, index=False)
-                st.success("🎉 ¡Tu voto ha sido registrado correctamente!")
+                write_csv_to_github(DATA_FILE, data)
 
-# Sección: Editar registros existentes
+# Editar registros existentes
 with st.expander("🛠️ Editar Registros Existentes"):
     st.write("Selecciona un registro para editar la información de un usuario.")
-    # Crear una lista combinada de nombres y apellidos para autocompletar
     opciones_busqueda = (data["Nombre"] + " " + data["Apellido"]).tolist()
-
-    # Usar selectbox para buscar registros por nombre y apellido
     seleccion = st.selectbox("Buscar registro", [""] + opciones_busqueda)
 
     if seleccion:
-        # Filtrar el registro seleccionado
         nombre_seleccionado, apellido_seleccionado = seleccion.split(" ", 1)
         registro = data[
             (data["Nombre"] == nombre_seleccionado) &
@@ -81,33 +107,24 @@ with st.expander("🛠️ Editar Registros Existentes"):
             row_index = registro.index[0]
             st.write(f"Editando el registro de {seleccion}:")
 
-            # Crear campos editables para el registro
             nombre_edit = st.text_input("Editar Nombre", registro.iloc[0]["Nombre"])
             apellido_edit = st.text_input("Editar Apellido", registro.iloc[0]["Apellido"])
             celular_edit = st.text_input("Editar Número de Celular", registro.iloc[0]["Número de Celular"])
             profesor_edit = st.selectbox("Editar Profesor", profesores, index=profesores.index(registro.iloc[0]["Profesor"]))
 
-            # Botón para guardar cambios
             if st.button("Guardar Cambios"):
                 data.at[row_index, "Nombre"] = nombre_edit
                 data.at[row_index, "Apellido"] = apellido_edit
                 data.at[row_index, "Número de Celular"] = celular_edit
                 data.at[row_index, "Profesor"] = profesor_edit
-                data.to_csv(DATA_FILE, index=False)
-                st.success("🎉 ¡Registro actualizado correctamente!")
-        else:
-            st.warning("⚠️ No se encontró el registro seleccionado.")
-    else:
-        st.info("Escribe y selecciona un registro para editar.")
+                write_csv_to_github(DATA_FILE, data)
 
-# Sección: Distribución de votos
+# Distribución de votos
 with st.expander("📊 Distribución de Votos por Profesor"):
     if not data.empty:
-        # Contar votos por profesor
         votos_por_profesor = data["Profesor"].value_counts().reset_index()
         votos_por_profesor.columns = ["Profesor", "Votos"]
 
-        # Crear gráfico de pastel con colores variados
         fig_pie = px.pie(
             votos_por_profesor, 
             names="Profesor", 
@@ -118,23 +135,20 @@ with st.expander("📊 Distribución de Votos por Profesor"):
         fig_pie.update_traces(textinfo="percent+label")
         fig_pie.update_layout(width=1000, height=600)
 
-        # Mostrar gráfico
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.warning("⚠️ No hay datos disponibles para mostrar el gráfico.")
 
-# Sección: Lista de registrados
+# Lista de registrados
 with st.expander("📜 Lista de Registrados"):
     if not data.empty:
         st.dataframe(data, use_container_width=True)
     else:
         st.warning("⚠️ No hay datos disponibles para mostrar la tabla.")
 
-# Sección: Gestión de profesores
+# Gestión de profesores
 with st.expander("👩‍🏫 Gestión de Profesores"):
     st.write("Aquí puedes agregar nuevos profesores o eliminar a los existentes.")
-
-    # Formulario para agregar un nuevo profesor
     with st.form("agregar_profesor"):
         nuevo_profesor = st.text_input("Nombre del nuevo profesor:")
         agregar_profesor = st.form_submit_button("➕ Agregar Profesor")
@@ -146,18 +160,12 @@ with st.expander("👩‍🏫 Gestión de Profesores"):
                 st.warning("⚠️ Este profesor ya está en la lista.")
             else:
                 profesores.append(nuevo_profesor)
-                pd.DataFrame({"Profesor": profesores}).to_csv(PROFESORES_FILE, index=False)
-                st.success(f"✅ Profesor {nuevo_profesor} agregado correctamente.")
+                write_csv_to_github(PROFESORES_FILE, pd.DataFrame({"Profesor": profesores}))
 
-    # Formulario para eliminar un profesor
     with st.form("eliminar_profesor"):
         profesor_a_eliminar = st.selectbox("Selecciona un profesor para eliminar:", profesores)
         eliminar_profesor = st.form_submit_button("🗑️ Eliminar Profesor")
 
         if eliminar_profesor:
-            if profesor_a_eliminar in profesores:
-                profesores.remove(profesor_a_eliminar)
-                pd.DataFrame({"Profesor": profesores}).to_csv(PROFESORES_FILE, index=False)
-                st.success(f"✅ Profesor {profesor_a_eliminar} eliminado correctamente.")
-            else:
-                st.error("⚠️ No se pudo encontrar el profesor en la lista.")
+            profesores.remove(profesor_a_eliminar)
+            write_csv_to_github(PROFESORES_FILE, pd.DataFrame({"Profesor": profesores}))
