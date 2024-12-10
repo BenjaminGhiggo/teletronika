@@ -63,6 +63,48 @@ with st.form("formulario_votacion"):
             data.to_csv(DATA_FILE, index=False)
             st.success("🎉 ¡Tu voto ha sido registrado correctamente!")
 
+# Sección para editar registros
+st.subheader("🛠️ Editar Registros Existentes")
+with st.expander("🔍 Buscar y editar un registro"):
+    st.write("Selecciona un registro para editar la información de un usuario.")
+
+    # Crear una lista combinada de nombres y apellidos para autocompletar
+    opciones_busqueda = (data["Nombre"] + " " + data["Apellido"]).tolist()
+
+    # Usar selectbox para buscar registros por nombre y apellido
+    seleccion = st.selectbox("Buscar registro", [""] + opciones_busqueda)
+
+    if seleccion:
+        # Filtrar el registro seleccionado
+        nombre_seleccionado, apellido_seleccionado = seleccion.split(" ", 1)
+        registro = data[
+            (data["Nombre"] == nombre_seleccionado) &
+            (data["Apellido"] == apellido_seleccionado)
+        ]
+
+        if not registro.empty:
+            row_index = registro.index[0]
+            st.write(f"Editando el registro de {seleccion}:")
+
+            # Crear campos editables para el registro
+            nombre_edit = st.text_input("Editar Nombre", registro.iloc[0]["Nombre"])
+            apellido_edit = st.text_input("Editar Apellido", registro.iloc[0]["Apellido"])
+            celular_edit = st.text_input("Editar Número de Celular", registro.iloc[0]["Número de Celular"])
+            profesor_edit = st.selectbox("Editar Profesor", profesores, index=profesores.index(registro.iloc[0]["Profesor"]))
+
+            # Botón para guardar cambios
+            if st.button("Guardar Cambios"):
+                data.at[row_index, "Nombre"] = nombre_edit
+                data.at[row_index, "Apellido"] = apellido_edit
+                data.at[row_index, "Número de Celular"] = celular_edit
+                data.at[row_index, "Profesor"] = profesor_edit
+                data.to_csv(DATA_FILE, index=False)
+                st.success("🎉 ¡Registro actualizado correctamente!")
+        else:
+            st.warning("⚠️ No se encontró el registro seleccionado.")
+    else:
+        st.info("Escribe y selecciona un registro para editar.")
+
 # Separador visual
 st.divider()
 
@@ -89,13 +131,9 @@ if not data.empty:
 else:
     st.warning("⚠️ No hay datos disponibles para mostrar el gráfico.")
 
-# Separador visual
-st.divider()
-
 # Mostrar lista de registrados como tabla
 st.subheader("📜 Lista de Registrados")
 if not data.empty:
-    # Mostrar tabla interactiva
     st.dataframe(data, use_container_width=True)
 else:
     st.warning("⚠️ No hay datos disponibles para mostrar la tabla.")
